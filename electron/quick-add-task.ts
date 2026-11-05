@@ -11,6 +11,14 @@ export const QUICK_ADD_FRAME_NAME = 'super-productivity-quick-add';
 let popup: BrowserWindow | undefined;
 let isOpenRequested = false;
 
+export const toggleQuickAddTask = (mainWindow: BrowserWindow): void => {
+  if (popup && !popup.isDestroyed()) {
+    popup.close();
+  } else {
+    mainWindow.webContents.send(IPC.OPEN_QUICK_ADD_TASK);
+  }
+};
+
 /** The parent renders its existing Angular bar here, sharing one store/database. */
 export const initQuickAddTask = (getMainWindow: () => BrowserWindow): void => {
   ipcMain.handle(IPC.OPEN_QUICK_ADD_TASK, (event) => {

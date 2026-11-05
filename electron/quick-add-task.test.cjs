@@ -33,6 +33,30 @@ try {
 const event = { sender: main.webContents, senderFrame: main.webContents.mainFrame };
 const details = { url: 'about:blank', frameName: capture.QUICK_ADD_FRAME_NAME };
 
+test('global shortcut opens, closes, and reopens the capture window', () => {
+  const sent = [];
+  main.webContents.send = (channel) => sent.push(channel);
+  capture.toggleQuickAddTask(main);
+  assert.deepEqual(sent, ['OPEN_QUICK_ADD_TASK']);
+
+  const win = new EventEmitter();
+  win.webContents = new EventEmitter();
+  win.webContents.setWindowOpenHandler = () => {};
+  win.isDestroyed = () => false;
+  let closes = 0;
+  win.close = () => {
+    closes++;
+    win.emit('closed');
+  };
+  capture.registerQuickAddTaskWindow(win, details);
+  capture.toggleQuickAddTask(main);
+  assert.equal(closes, 1);
+  assert.equal(sent.length, 1);
+
+  capture.toggleQuickAddTask(main);
+  assert.deepEqual(sent, ['OPEN_QUICK_ADD_TASK', 'OPEN_QUICK_ADD_TASK']);
+});
+
 test('only a main-frame request authorizes one blank capture surface', () => {
   const prepare = handlers.get('OPEN_QUICK_ADD_TASK');
   assert.equal(capture.openQuickAddTaskWindow(details), undefined);

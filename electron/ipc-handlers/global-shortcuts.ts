@@ -8,7 +8,7 @@ import { getWin } from '../main-window';
 import { toggleTaskWidgetVisibility } from '../task-widget/task-widget';
 import { showOrFocus, toggleWindowVisibility } from '../various-shared';
 import { errorHandlerWithFrontendInform } from '../error-handler-with-frontend-inform';
-import { initQuickAddTask } from '../quick-add-task';
+import { initQuickAddTask, toggleQuickAddTask } from '../quick-add-task';
 
 export const initGlobalShortcutsIpc = (): void => {
   initQuickAddTask(getWin);
@@ -51,7 +51,7 @@ const registerShowAppShortCuts = (cfg: KeyboardConfig): void => {
 
           case 'globalAddTask':
             actionFn = () => {
-              mainWin.webContents.send(IPC.OPEN_QUICK_ADD_TASK);
+              toggleQuickAddTask(mainWin);
             };
             break;
 
