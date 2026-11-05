@@ -31,6 +31,8 @@ import {
 import { JiraElectronApi } from './shared-with-frontend/jira-request.model';
 
 export interface ElectronAPI {
+  openQuickAddTask(labels: { placeholder: string; error: string }): void;
+  quickAddTaskResult(id: number, success: boolean): void;
   on(channel: string, listener: (...args: unknown[]) => void): void;
 
   // SYNC

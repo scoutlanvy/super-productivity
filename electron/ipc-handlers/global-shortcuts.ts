@@ -8,8 +8,10 @@ import { getWin } from '../main-window';
 import { toggleTaskWidgetVisibility } from '../task-widget/task-widget';
 import { showOrFocus, toggleWindowVisibility } from '../various-shared';
 import { errorHandlerWithFrontendInform } from '../error-handler-with-frontend-inform';
+import { initQuickAddTask } from '../quick-add-task';
 
 export const initGlobalShortcutsIpc = (): void => {
+  initQuickAddTask(getWin);
   ipcMain.on(IPC.REGISTER_GLOBAL_SHORTCUTS_EVENT, (_ev, cfg) => {
     registerShowAppShortCuts(cfg);
   });
@@ -49,9 +51,7 @@ const registerShowAppShortCuts = (cfg: KeyboardConfig): void => {
 
           case 'globalAddTask':
             actionFn = () => {
-              showOrFocus(mainWin);
-              // NOTE: delay slightly to make sure app is ready
-              mainWin.webContents.send(IPC.SHOW_ADD_TASK_BAR);
+              mainWin.webContents.send(IPC.OPEN_QUICK_ADD_TASK);
             };
             break;
 

@@ -1,5 +1,7 @@
 import { computed, inject, Injectable } from '@angular/core';
 import { OverlayContainer } from '@angular/cdk/overlay';
+import { TranslateService } from '@ngx-translate/core';
+import { DataInitStateService } from '../../core/data-init/data-init-state.service';
 import { IS_ELECTRON } from '../../app.constants';
 import { checkKeyCombo } from '../../util/check-key-combo';
 import { isInputElement } from '../../util/dom-element';
@@ -59,6 +61,8 @@ export const isHelpKeyCombo = (
   providedIn: 'root',
 })
 export class ShortcutService {
+  private _translateService = inject(TranslateService);
+  private _dataInitStateService = inject(DataInitStateService);
   private _configService = inject(GlobalConfigService);
   private _router = inject(Router);
   private _layoutService = inject(LayoutService);
@@ -100,6 +104,30 @@ export class ShortcutService {
 
     // GLOBAL SHORTCUTS
     if (IS_ELECTRON) {
+      window.ea.on(IPC.OPEN_QUICK_ADD_TASK, () => {
+        void firstValueFrom(this._dataInitStateService.isAllDataLoadedInitially$).then(
+          () =>
+            window.ea.openQuickAddTask({
+              placeholder: this._translateService.instant(
+                T.F.TASK.ADD_TASK_BAR.PLACEHOLDER_CREATE,
+              ),
+              error: this._translateService.instant(T.F.IOS_SHARE.SAVE_ERROR),
+            }),
+        );
+      });
+      window.ea.on(IPC.QUICK_ADD_TASK_SUBMIT, (request) => {
+        if (
+          !request ||
+          typeof request !== 'object' ||
+          !('id' in request) ||
+          typeof request.id !== 'number' ||
+          !('title' in request) ||
+          typeof request.title !== 'string' ||
+          !request.title.trim()
+        )
+          return;
+        void this._addTaskFromCapture(request.id, request.title);
+      });
       window.ea.on(IPC.TASK_TOGGLE_START, () => {
         this._taskService.toggleStartTask();
       });
@@ -116,6 +144,19 @@ export class ShortcutService {
           });
         }
       });
+    }
+  }
+
+  private async _addTaskFromCapture(id: number, title: string): Promise<void> {
+    let success = false;
+    try {
+      await firstValueFrom(this._dataInitStateService.isAllDataLoadedInitially$);
+      const taskId = this._taskService.add(title);
+      success = !!(await firstValueFrom(this._taskService.getByIdOnce$(taskId)));
+    } catch {
+      // The capture window retains its draft and shows the translated error.
+    } finally {
+      window.ea.quickAddTaskResult(id, success);
     }
   }
 

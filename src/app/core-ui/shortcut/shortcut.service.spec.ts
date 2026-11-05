@@ -19,6 +19,8 @@ import { OverlayContainer } from '@angular/cdk/overlay';
 import { TaskViewCustomizerService } from '../../features/task-view-customizer/task-view-customizer.service';
 import { signal } from '@angular/core';
 import { Observable, of, Subject } from 'rxjs';
+import { TranslateService } from '@ngx-translate/core';
+import { DataInitStateService } from '../../core/data-init/data-init-state.service';
 
 const PLUGIN_SHORTCUT_CFG_KEY = 'plugin_automations:r1';
 
@@ -80,12 +82,26 @@ describe('ShortcutService', () => {
     TestBed.configureTestingModule({
       providers: [
         ShortcutService,
+        { provide: TranslateService, useValue: { instant: (key: string) => key } },
+        {
+          provide: DataInitStateService,
+          useValue: { isAllDataLoadedInitially$: of(true) },
+        },
         { provide: TaskShortcutService, useValue: mockTaskShortcutService },
         { provide: Router, useValue: mockRouter },
         { provide: GlobalConfigService, useValue: mockConfigService },
         { provide: LayoutService, useValue: mockLayoutService },
         { provide: MatDialog, useValue: mockMatDialog },
-        { provide: TaskService, useValue: { currentTaskId: signal(null) } },
+        {
+          provide: TaskService,
+          useValue: {
+            currentTaskId: signal(null),
+            add: jasmine.createSpy('add').and.returnValue('captured-task'),
+            getByIdOnce$: jasmine
+              .createSpy('getByIdOnce$')
+              .and.returnValue(of({ id: 'captured-task' })),
+          },
+        },
         { provide: WorkContextService, useValue: { activeWorkContext$: signal({}) } },
         { provide: ActivatedRoute, useValue: { queryParams: of({}) } },
         { provide: UiHelperService, useValue: {} },
@@ -106,6 +122,37 @@ describe('ShortcutService', () => {
     });
 
     service = TestBed.inject(ShortcutService);
+  });
+
+  describe('desktop capture', () => {
+    it('adds through TaskService once and acknowledges the resulting task', async () => {
+      const previousBridge = window.ea;
+      const result = jasmine.createSpy('quickAddTaskResult');
+      window.ea = { ...previousBridge, quickAddTaskResult: result };
+      try {
+        await service['_addTaskFromCapture'](7, 'Write notes #work t25m');
+        expect(TestBed.inject(TaskService).add).toHaveBeenCalledOnceWith(
+          'Write notes #work t25m',
+        );
+        expect(result).toHaveBeenCalledOnceWith(7, true);
+      } finally {
+        window.ea = previousBridge;
+      }
+    });
+
+    it('reports rejected creation so the capture window retains its draft', async () => {
+      const previousBridge = window.ea;
+      const result = jasmine.createSpy('quickAddTaskResult');
+      window.ea = { ...previousBridge, quickAddTaskResult: result };
+      const tasks = TestBed.inject(TaskService);
+      (tasks.getByIdOnce$ as jasmine.Spy).and.returnValue(of(undefined));
+      try {
+        await service['_addTaskFromCapture'](8, 'Keep my draft');
+        expect(result).toHaveBeenCalledOnceWith(8, false);
+      } finally {
+        window.ea = previousBridge;
+      }
+    });
   });
 
   describe('handleKeyDown', () => {
