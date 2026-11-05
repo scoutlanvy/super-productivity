@@ -1,6 +1,5 @@
 import { computed, inject, Injectable } from '@angular/core';
 import { OverlayContainer } from '@angular/cdk/overlay';
-import { TranslateService } from '@ngx-translate/core';
 import { DataInitStateService } from '../../core/data-init/data-init-state.service';
 import { IS_ELECTRON } from '../../app.constants';
 import { checkKeyCombo } from '../../util/check-key-combo';
@@ -28,6 +27,7 @@ import { TODAY_TAG } from '../../features/tag/tag.const';
 import { DialogConfirmComponent } from '../../ui/dialog-confirm/dialog-confirm.component';
 import { TaskViewCustomizerService } from '../../features/task-view-customizer/task-view-customizer.service';
 import { DIALOG_AUTO_FOCUS_TYPING } from '../../util/dialog-auto-focus';
+import { QuickAddTaskService } from '../quick-add-task/quick-add-task.service';
 
 // NOTE: Relying on Angular CDK overlay CSS class names keeps shortcut suppression simple.
 // If CDK changes these class names we only need to adjust the helpers below.
@@ -61,7 +61,6 @@ export const isHelpKeyCombo = (
   providedIn: 'root',
 })
 export class ShortcutService {
-  private _translateService = inject(TranslateService);
   private _dataInitStateService = inject(DataInitStateService);
   private _configService = inject(GlobalConfigService);
   private _router = inject(Router);
@@ -78,6 +77,7 @@ export class ShortcutService {
   private _overlayContainer = inject(OverlayContainer);
   private _isNoteTaskHandoffPending = false;
   private _taskViewCustomizerService = inject(TaskViewCustomizerService);
+  private _quickAddTaskService = inject(QuickAddTaskService);
 
   isCtrlPressed$: Observable<boolean> = fromEvent(document, 'keydown').pipe(
     switchMap((ev: Event) => {
@@ -105,28 +105,7 @@ export class ShortcutService {
     // GLOBAL SHORTCUTS
     if (IS_ELECTRON) {
       window.ea.on(IPC.OPEN_QUICK_ADD_TASK, () => {
-        void firstValueFrom(this._dataInitStateService.isAllDataLoadedInitially$).then(
-          () =>
-            window.ea.openQuickAddTask({
-              placeholder: this._translateService.instant(
-                T.F.TASK.ADD_TASK_BAR.PLACEHOLDER_CREATE,
-              ),
-              error: this._translateService.instant(T.F.IOS_SHARE.SAVE_ERROR),
-            }),
-        );
-      });
-      window.ea.on(IPC.QUICK_ADD_TASK_SUBMIT, (request) => {
-        if (
-          !request ||
-          typeof request !== 'object' ||
-          !('id' in request) ||
-          typeof request.id !== 'number' ||
-          !('title' in request) ||
-          typeof request.title !== 'string' ||
-          !request.title.trim()
-        )
-          return;
-        void this._addTaskFromCapture(request.id, request.title);
+        void this._openQuickAddTask();
       });
       window.ea.on(IPC.TASK_TOGGLE_START, () => {
         this._taskService.toggleStartTask();
@@ -147,17 +126,9 @@ export class ShortcutService {
     }
   }
 
-  private async _addTaskFromCapture(id: number, title: string): Promise<void> {
-    let success = false;
-    try {
-      await firstValueFrom(this._dataInitStateService.isAllDataLoadedInitially$);
-      const taskId = this._taskService.add(title);
-      success = !!(await firstValueFrom(this._taskService.getByIdOnce$(taskId)));
-    } catch {
-      // The capture window retains its draft and shows the translated error.
-    } finally {
-      window.ea.quickAddTaskResult(id, success);
-    }
+  private async _openQuickAddTask(): Promise<void> {
+    await firstValueFrom(this._dataInitStateService.isAllDataLoadedInitially$);
+    await this._quickAddTaskService.open();
   }
 
   private async _showAddTaskBarFromDesktopCommand(): Promise<void> {

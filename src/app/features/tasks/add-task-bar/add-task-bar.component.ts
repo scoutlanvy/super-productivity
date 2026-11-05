@@ -6,12 +6,12 @@ import {
   computed,
   DestroyRef,
   ElementRef,
-  HostListener,
   inject,
   input,
   OnDestroy,
   OnInit,
   output,
+  Renderer2,
   signal,
   viewChild,
 } from '@angular/core';
@@ -22,7 +22,7 @@ import { MentionModule } from '../../../ui/mentions';
 import { MatIconButton } from '@angular/material/button';
 import { MatIcon } from '@angular/material/icon';
 import { MatTooltip } from '@angular/material/tooltip';
-import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
+import { AsyncPipe, DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import { LS } from '../../../core/persistence/storage-keys.const';
 import { blendInOutAnimation } from 'src/app/ui/animations/blend-in-out.ani';
 import { expandFadeAnimation } from '../../../ui/animations/expand.ani';
@@ -137,6 +137,8 @@ export interface TaskAddEvent {
   providers: [AddTaskBarStateService, AddTaskBarParserService],
 })
 export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
+  private readonly _document = inject(DOCUMENT);
+  private readonly _renderer = inject(Renderer2);
   private readonly _taskService = inject(TaskService);
   private readonly _workContextService = inject(WorkContextService);
   private readonly _projectService = inject(ProjectService);
@@ -376,7 +378,13 @@ export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
     this._setupTextParsing();
     this._setupSuggestions();
 
-    document.body.classList.add(BodyClass.isAddTaskBarOpen);
+    this._destroyRef.onDestroy(
+      this._renderer.listen(this._document, 'click', (event: MouseEvent) =>
+        this.onDocumentClick(event),
+      ),
+    );
+
+    this._document.body.classList.add(BodyClass.isAddTaskBarOpen);
   }
 
   ngAfterViewInit(): void {
@@ -388,7 +396,7 @@ export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
   ngOnDestroy(): void {
     window.clearTimeout(this._focusTimeout);
     window.clearTimeout(this._autocompleteTimeout);
-    document.body.classList.remove(BodyClass.isAddTaskBarOpen);
+    this._document.body.classList.remove(BodyClass.isAddTaskBarOpen);
   }
 
   // Setup methods
@@ -867,7 +875,6 @@ export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
     });
   }
 
-  @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
     const component = target.closest('add-task-bar');
@@ -1082,7 +1089,7 @@ export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
       }
     };
 
-    document.body.focus();
+    this._document.body.focus();
     this.inputEl()?.nativeElement.focus();
 
     if (this._isAndroidWebView) {
@@ -1090,7 +1097,7 @@ export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
       // the IME reliably, and it has no iOS focusin scroll handler to disturb.
       window.setTimeout(() => this.inputEl()?.nativeElement.focus());
       this._focusTimeout = window.setTimeout(() => {
-        document.body.focus();
+        this._document.body.focus();
         focus();
         this._focusTimeout = undefined;
       }, 200);
@@ -1107,7 +1114,7 @@ export class AddTaskBarComponent implements AfterViewInit, OnInit, OnDestroy {
     // animation, one of the sources of the jumping in #9779.
     this._focusTimeout = window.setTimeout(() => {
       this._focusTimeout = undefined;
-      if (document.activeElement !== this.inputEl()?.nativeElement) {
+      if (this._document.activeElement !== this.inputEl()?.nativeElement) {
         focus();
       }
     }, 50);

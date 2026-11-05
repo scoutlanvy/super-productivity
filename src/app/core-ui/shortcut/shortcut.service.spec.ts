@@ -21,6 +21,7 @@ import { signal } from '@angular/core';
 import { Observable, of, Subject } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { DataInitStateService } from '../../core/data-init/data-init-state.service';
+import { QuickAddTaskService } from '../quick-add-task/quick-add-task.service';
 
 const PLUGIN_SHORTCUT_CFG_KEY = 'plugin_automations:r1';
 
@@ -82,6 +83,10 @@ describe('ShortcutService', () => {
     TestBed.configureTestingModule({
       providers: [
         ShortcutService,
+        {
+          provide: QuickAddTaskService,
+          useValue: { open: jasmine.createSpy('open').and.resolveTo() },
+        },
         { provide: TranslateService, useValue: { instant: (key: string) => key } },
         {
           provide: DataInitStateService,
@@ -125,33 +130,24 @@ describe('ShortcutService', () => {
   });
 
   describe('desktop capture', () => {
-    it('adds through TaskService once and acknowledges the resulting task', async () => {
-      const previousBridge = window.ea;
-      const result = jasmine.createSpy('quickAddTaskResult');
-      window.ea = { ...previousBridge, quickAddTaskResult: result };
-      try {
-        await service['_addTaskFromCapture'](7, 'Write notes #work t25m');
-        expect(TestBed.inject(TaskService).add).toHaveBeenCalledOnceWith(
-          'Write notes #work t25m',
-        );
-        expect(result).toHaveBeenCalledOnceWith(7, true);
-      } finally {
-        window.ea = previousBridge;
-      }
+    it('opens the shared task bar after data is ready without adding a task', async () => {
+      await service['_openQuickAddTask']();
+      expect(TestBed.inject(QuickAddTaskService).open).toHaveBeenCalledTimes(1);
+      expect(TestBed.inject(TaskService).add).not.toHaveBeenCalled();
     });
 
-    it('reports rejected creation so the capture window retains its draft', async () => {
-      const previousBridge = window.ea;
-      const result = jasmine.createSpy('quickAddTaskResult');
-      window.ea = { ...previousBridge, quickAddTaskResult: result };
-      const tasks = TestBed.inject(TaskService);
-      (tasks.getByIdOnce$ as jasmine.Spy).and.returnValue(of(undefined));
-      try {
-        await service['_addTaskFromCapture'](8, 'Keep my draft');
-        expect(result).toHaveBeenCalledOnceWith(8, false);
-      } finally {
-        window.ea = previousBridge;
-      }
+    it('does not open capture until initial data loading completes', async () => {
+      const ready = new Subject<boolean>();
+      Object.defineProperty(
+        TestBed.inject(DataInitStateService),
+        'isAllDataLoadedInitially$',
+        { value: ready },
+      );
+      const opening = service['_openQuickAddTask']();
+      expect(TestBed.inject(QuickAddTaskService).open).not.toHaveBeenCalled();
+      ready.next(true);
+      await opening;
+      expect(TestBed.inject(QuickAddTaskService).open).toHaveBeenCalledTimes(1);
     });
   });
 

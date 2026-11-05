@@ -38,8 +38,8 @@ const _invoke: (channel: IPCEventValue, ...args: unknown[]) => Promise<unknown> 
 const consumeJiraApi = createJiraPreloadApiConsumer(_invoke);
 
 const ea: ElectronAPI = {
-  openQuickAddTask: (labels) => _send(IPC.OPEN_QUICK_ADD_TASK, labels),
-  quickAddTaskResult: (id, success) => _send(IPC.QUICK_ADD_TASK_RESULT, id, success),
+  openQuickAddTask: () => ipcRenderer.invoke(IPC.OPEN_QUICK_ADD_TASK),
+  resizeQuickAddTask: (height) => _send(IPC.QUICK_ADD_TASK_RESIZE, height),
   on: (channel: string, listener: (...args: unknown[]) => void) => {
     // NOTE: there is no proper way to unsubscribe apart from unsubscribing all
     ipcRenderer.on(channel, toPayloadOnlyIpcListener(listener));

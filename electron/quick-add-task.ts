@@ -1,93 +1,96 @@
-import { BrowserWindow, ipcMain, screen } from 'electron';
-import { join } from 'path';
+import {
+  BrowserWindow,
+  HandlerDetails,
+  ipcMain,
+  screen,
+  WindowOpenHandlerResponse,
+} from 'electron';
 import { IPC } from './shared-with-frontend/ipc-events.const';
-import { assertSecureWebPreferences } from './web-preferences-guard';
 
-let popup: BrowserWindow | null = null;
+export const QUICK_ADD_FRAME_NAME = 'super-productivity-quick-add';
+let popup: BrowserWindow | undefined;
+let isOpenRequested = false;
 
-/** Uses the running app's store; the capture window never opens its own database. */
+/** The parent renders its existing Angular bar here, sharing one store/database. */
 export const initQuickAddTask = (getMainWindow: () => BrowserWindow): void => {
-  let pending: { id: number; resolve: (success: boolean) => void } | undefined;
-  let nextId = 0;
-
-  ipcMain.on(IPC.OPEN_QUICK_ADD_TASK, (event, labels: unknown) => {
-    if (event.sender !== getMainWindow().webContents) return;
+  ipcMain.handle(IPC.OPEN_QUICK_ADD_TASK, (event) => {
+    const main = getMainWindow().webContents;
+    if (event.sender !== main || event.senderFrame !== main.mainFrame) return false;
     if (popup && !popup.isDestroyed()) {
       popup.show();
       popup.focus();
-      return;
+      return false;
     }
+    isOpenRequested = true;
+    return true;
+  });
+  ipcMain.on(IPC.QUICK_ADD_TASK_RESIZE, (event, height: unknown) => {
     if (
-      !labels ||
-      typeof labels !== 'object' ||
-      !('placeholder' in labels) ||
-      typeof labels.placeholder !== 'string' ||
-      !('error' in labels) ||
-      typeof labels.error !== 'string'
+      event.sender !== getMainWindow().webContents ||
+      !popup ||
+      popup.isDestroyed() ||
+      typeof height !== 'number' ||
+      !Number.isFinite(height)
     )
       return;
+    const bounds = popup.getBounds();
+    const area = screen.getDisplayMatching(bounds).workArea;
+    const availableHeight = area.y + area.height - bounds.y;
+    // Windows fixes the min/max bounds when resizable is false; unlock them
+    // during programmatic resizing so closing a menu can shrink the window.
+    popup.setResizable(true);
+    popup.setSize(
+      bounds.width,
+      Math.min(Math.max(100, Math.ceil(height)), availableHeight),
+    );
+    popup.setResizable(false);
+  });
+};
 
-    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-    const width = Math.min(760, area.width);
-    const webPreferences = {
-      preload: join(__dirname, 'quick-add-task-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      nodeIntegrationInSubFrames: false,
-      sandbox: true,
-    };
-    assertSecureWebPreferences(webPreferences, 'quick-add-task');
-    const win = new BrowserWindow({
+export const openQuickAddTaskWindow = (
+  details: HandlerDetails,
+): WindowOpenHandlerResponse | undefined => {
+  if (
+    !isOpenRequested ||
+    details.url !== 'about:blank' ||
+    details.frameName !== QUICK_ADD_FRAME_NAME
+  )
+    return undefined;
+  isOpenRequested = false;
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const width = Math.min(820, area.width);
+  return {
+    action: 'allow',
+    overrideBrowserWindowOptions: {
       width,
-      height: 160,
+      height: 120,
       x: area.x + Math.round((area.width - width) / 2),
       y: area.y + Math.round(area.height / 4),
       frame: false,
+      transparent: true,
       resizable: false,
+      maximizable: false,
+      fullscreenable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
-      show: false,
-      webPreferences,
-    });
-    popup = win;
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    win.webContents.on('will-navigate', (navigation) => navigation.preventDefault());
-    win.once('ready-to-show', () => {
-      win.webContents.send(IPC.OPEN_QUICK_ADD_TASK, labels);
-      win.show();
-      win.focus();
-    });
-    win.on('closed', () => {
-      popup = null;
-      pending?.resolve(false);
-      pending = undefined;
-    });
-    void win.loadFile(join(__dirname, 'quick-add-task.html'));
-  });
+      // about:blank inherits the parent's secure webPreferences. Do not load
+      // another app entry point: it would initialize a second store.
+    },
+  };
+};
 
-  ipcMain.handle(IPC.QUICK_ADD_TASK_SUBMIT, (event, title: unknown) => {
-    if (
-      event.sender !== popup?.webContents ||
-      pending ||
-      typeof title !== 'string' ||
-      !title.trim()
-    )
-      return false;
-    return new Promise<boolean>((resolve) => {
-      const id = ++nextId;
-      pending = { id, resolve };
-      getMainWindow().webContents.send(IPC.QUICK_ADD_TASK_SUBMIT, {
-        id,
-        title: title.trim(),
-      });
-    });
+export const registerQuickAddTaskWindow = (
+  win: BrowserWindow,
+  details: { url: string; frameName: string },
+): boolean => {
+  if (details.url !== 'about:blank' || details.frameName !== QUICK_ADD_FRAME_NAME)
+    return false;
+  popup = win;
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event) => event.preventDefault());
+  win.webContents.on('will-redirect', (event) => event.preventDefault());
+  win.on('closed', () => {
+    popup = undefined;
   });
-  ipcMain.on(IPC.QUICK_ADD_TASK_RESULT, (event, id: unknown, success: unknown) => {
-    if (event.sender !== getMainWindow().webContents || id !== pending?.id) return;
-    pending?.resolve(success === true);
-    pending = undefined;
-  });
-  ipcMain.on(IPC.QUICK_ADD_TASK_CLOSE, (event) => {
-    if (event.sender === popup?.webContents && !pending) popup.close();
-  });
+  return true;
 };
