@@ -1,5 +1,6 @@
 import { computed, inject, Injectable } from '@angular/core';
 import { OverlayContainer } from '@angular/cdk/overlay';
+import { DataInitStateService } from '../../core/data-init/data-init-state.service';
 import { IS_ELECTRON } from '../../app.constants';
 import { checkKeyCombo } from '../../util/check-key-combo';
 import { isInputElement } from '../../util/dom-element';
@@ -26,6 +27,7 @@ import { TODAY_TAG } from '../../features/tag/tag.const';
 import { DialogConfirmComponent } from '../../ui/dialog-confirm/dialog-confirm.component';
 import { TaskViewCustomizerService } from '../../features/task-view-customizer/task-view-customizer.service';
 import { DIALOG_AUTO_FOCUS_TYPING } from '../../util/dialog-auto-focus';
+import { QuickAddTaskService } from '../quick-add-task/quick-add-task.service';
 
 // NOTE: Relying on Angular CDK overlay CSS class names keeps shortcut suppression simple.
 // If CDK changes these class names we only need to adjust the helpers below.
@@ -59,6 +61,7 @@ export const isHelpKeyCombo = (
   providedIn: 'root',
 })
 export class ShortcutService {
+  private _dataInitStateService = inject(DataInitStateService);
   private _configService = inject(GlobalConfigService);
   private _router = inject(Router);
   private _layoutService = inject(LayoutService);
@@ -74,6 +77,7 @@ export class ShortcutService {
   private _overlayContainer = inject(OverlayContainer);
   private _isNoteTaskHandoffPending = false;
   private _taskViewCustomizerService = inject(TaskViewCustomizerService);
+  private _quickAddTaskService = inject(QuickAddTaskService);
 
   isCtrlPressed$: Observable<boolean> = fromEvent(document, 'keydown').pipe(
     switchMap((ev: Event) => {
@@ -100,6 +104,9 @@ export class ShortcutService {
 
     // GLOBAL SHORTCUTS
     if (IS_ELECTRON) {
+      window.ea.on(IPC.OPEN_QUICK_ADD_TASK, () => {
+        void this._openQuickAddTask();
+      });
       window.ea.on(IPC.TASK_TOGGLE_START, () => {
         this._taskService.toggleStartTask();
       });
@@ -117,6 +124,11 @@ export class ShortcutService {
         }
       });
     }
+  }
+
+  private async _openQuickAddTask(): Promise<void> {
+    await firstValueFrom(this._dataInitStateService.isAllDataLoadedInitially$);
+    await this._quickAddTaskService.open();
   }
 
   private async _showAddTaskBarFromDesktopCommand(): Promise<void> {

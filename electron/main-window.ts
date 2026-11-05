@@ -48,6 +48,7 @@ import { markGpuStartupSuccess } from './gpu-startup-guard';
 import { isAppOriginUrl } from './navigation-guard';
 import { assertSecureWebPreferences } from './web-preferences-guard';
 import { applyJiraImageAuth } from './jira-image-auth';
+import { openQuickAddTaskWindow, registerQuickAddTaskWindow } from './quick-add-task';
 
 // Long enough to outlast a resize or move gesture, so a drag records one
 // sample rather than one per frame.
@@ -662,13 +663,14 @@ function initWinEventListeners(app: Electron.App): void {
     guardNavigation(ev, url, 'will-redirect');
   });
   mainWin.webContents.setWindowOpenHandler((details) => {
+    const quickAdd = openQuickAddTaskWindow(details);
+    if (quickAdd) return quickAdd;
     openUrlInBrowser(details.url);
     return { action: 'deny' };
   });
-  // Defense in depth: setWindowOpenHandler already denies, so this should
-  // never fire. If a future code path ever enables window creation, destroy
-  // the spawned window rather than letting it inherit the preload bridge.
-  mainWin.webContents.on('did-create-window', (childWin) => {
+  // Only the explicitly requested, blank quick-add surface may share our renderer.
+  mainWin.webContents.on('did-create-window', (childWin, details) => {
+    if (registerQuickAddTaskWindow(childWin, details)) return;
     error('did-create-window fired despite deny handler — destroying child');
     try {
       childWin.destroy();

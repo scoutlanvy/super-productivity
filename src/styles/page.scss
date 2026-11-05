@@ -206,6 +206,17 @@ body {
   }
 }
 
+// Native quick-add owns only the bar and its overlays, with the desktop behind it.
+html.quick-add-window,
+body.quick-add-window:is(.isLightTheme, .isDarkTheme) {
+  background: transparent;
+  border: 0;
+
+  &::before {
+    display: none;
+  }
+}
+
 .page-wrapper {
   padding: var(--s) var(--s) calc(var(--s) * 9);
 

@@ -31,6 +31,8 @@ import {
 import { JiraElectronApi } from './shared-with-frontend/jira-request.model';
 
 export interface ElectronAPI {
+  openQuickAddTask(): Promise<boolean>;
+  resizeQuickAddTask(height: number): void;
   on(channel: string, listener: (...args: unknown[]) => void): void;
 
   // SYNC
